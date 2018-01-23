@@ -13,21 +13,22 @@
 #include "macro.h"
 #define P printf
 #define DIAG 0
+#define pi acos(-1.0)
 void readSamples(float**, float*, int*);
 int plotseg(float*,float*,int,char*,char*);
 int plabel(double,double);
-int notedetect(float* z, int m, float sr,char** chord);
-void fft(float** y, float** x, int m,float** z);
+void notedetect(float*, int, float, char**, char**);
+void fft(float**, float** , int,float**);
 char *filename;
 char graphlabel[400];
 
 int main(int argc,char** argv)
 {
-  int i, nsamps,t,m=13;
+  int i, nsamps,t,m=14, len = pow(2,m);
   float sr, dt;
-  float *audio, *x, *y, *z,*fre;
-  char* nonchord = {"!"};
-  char *chord;
+  float *audio, *x, *y, *z,*fre, *db, pret;
+  char *chord, *type, *preChord, *preType;
+
 
   P("Program to read and plot sound file samples \n");
   if(argc != 2)
@@ -46,30 +47,48 @@ int main(int argc,char** argv)
   }
   sprintf(graphlabel,"Spectrum Plot of file %s",filename);
 
-  fre = (float*)calloc(pow(2,m),sizeof(float));
-  x = (float*)calloc(pow(2,m+1),sizeof(float));
-
-  y = (float*)calloc(pow(2,m+1),sizeof(float));
-  z = calloc(pow(2,m),sizeof(float));
-  chord = calloc(2,sizeof(char));
+  fre = (float*)calloc(len,sizeof(float));
+  x = (float*)calloc(2*len,sizeof(float));
+  y = (float*)calloc(2*len,sizeof(float));
+  z = calloc(len,sizeof(float));
+  // db = calloc(len,sizeof(float));
   
-  for(t=0;t<pow(2,m);t++){
-    x[t]=audio[t+10000];
-    fre[t] = t/pow(2,m+1)*sr;
+  for(i=0;i<nsamps;i+=sr/3){
+    for(t=0;t<len;t++){
+      x[t] = audio[t+i];
+      //hamming window
+      // x[t] *= .54 + .46*cos(2*pi*(t-len/2.)/(len-1)); 
+      //Blackman–Harris window
+      x[t] *= 0.35875 - 0.48829*cos(2*pi*t/(len-1)) + 0.14128*cos(4*pi*t/(len-1)) - 0.01168*cos(6*pi*t/(len-1)); 
+      fre[t] = t/(2.*len)*sr;
+    }
+
+    fft(&y,&x,m,&z);
+    notedetect(z, m, sr, &chord, &type);
+    if(preChord!=chord){
+      if(i!=0) printf("Time: %.2f-%.2fs, Chord: %s %s\n", pret/(sr*1.0), i/(sr*1.0), preChord, preType);
+      preChord=chord;
+      preType=type;
+      pret=i;
+    }
   }
 
-  fft(&y,&x,m,&z);
-  int check = notedetect(z, m, sr,&chord);
-  if(chord==nonchord) printf("Chord can't be recognized!\n");
-  else if (check==0) printf("This is %s chord\n", chord);
-  else printf("This might be %s chord or chord can't be recognized\n", chord );
+  /* db verison
+  for(t=0;t<len;t++){
+  	if(z[t]>0)
+  		db[t] = 20*log10(z[t]);
+  	if(z[t]<40.) z[t] = 0.;
+  }
+  */ 
 
   P("Plot samples\n\n");
-  plotseg(fre,z, pow(2,10), "frequency (Hz)", "AMPLITUDE");
+  // plotseg(fre,z, pow(2,11), "frequency (Hz)", "AMPLITUDE");
+  // plotseg(fre,db,pow(2,10), "frequency (Hz)", "Amplitude(dB)");
   free(x);
   free(y);
   free(z);
   free(fre);
+  // free(db);
   
 }  /* end main() */
 
